@@ -7,6 +7,9 @@ template<typename T>
 class shared_ptr {
 public:
   T& operator*() { return reinterpret_cast<T&>(*this); }
+shared_ptr() {}
+shared_ptr(const shared_ptr<T>&) {}
+private:
 };
 
 /*
@@ -26,6 +29,13 @@ void f_arg(std::shared_ptr<int> ptr)
     f(ptr);
 }
 
+using SharedPtr = std::shared_ptr<int>;
+void f_using(SharedPtr ptr)
+{
+  if (*ptr)
+    f(ptr);
+}
+
 void f_local()
 {
   std::shared_ptr<int> ptr;
@@ -40,7 +50,7 @@ void f_move()
     f(std::move(ptr));
 }
 
-void f_return()
+std::shared_ptr<int> f_return()
 {
   std::shared_ptr<int> ptr;
   return ptr;

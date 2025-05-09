@@ -19,6 +19,8 @@ using utils::decl_ref_expr::allDeclRefExprs;
 void MoveSharedPtrCheck::registerMatchers(MatchFinder* Finder) {
   Finder->addMatcher(
       declRefExpr(
+          hasType(
+              hasCanonicalType(hasDeclaration(cxxRecordDecl().bind("canonical_decl")))),
           hasDeclaration(
               varDecl(hasAncestor(functionDecl().bind("func"))).bind("decl")),
           hasParent(expr(hasParent(cxxConstructExpr())).bind("use_parent"))
@@ -44,9 +46,10 @@ const Expr* MoveSharedPtrCheck::getLastVarUsage(const VarDecl& Var,
   return LastExpr;
 }
 
-const std::string_view kSharedPtr = "std::shared_ptr<";
+const std::string_view kSharedPtr = "class std::shared_ptr<";
 
 void MoveSharedPtrCheck::check(const MatchFinder::MatchResult& Result) {
+  const auto* MatchedCanonicalDecl = Result.Nodes.getNodeAs<CXXRecordDecl>("canonical_decl");
   const auto* MatchedDecl = Result.Nodes.getNodeAs<VarDecl>("decl");
   const auto* MatchedFunc = Result.Nodes.getNodeAs<FunctionDecl>("func");
   const auto* MatchedUse = Result.Nodes.getNodeAs<Expr>("use");
@@ -54,8 +57,8 @@ void MoveSharedPtrCheck::check(const MatchFinder::MatchResult& Result) {
 
   if (MatchedUseCall) return;
 
-  auto Type = MatchedDecl->getType().getAsString();
-  if (std::string_view(Type).substr(0, kSharedPtr.size()) != kSharedPtr) return;
+  if (MatchedCanonicalDecl->hasTrivialMoveConstructor())
+    return;
 
   const auto* LastUsage =
       getLastVarUsage(*MatchedDecl, *MatchedFunc, *Result.Context);
@@ -66,7 +69,7 @@ void MoveSharedPtrCheck::check(const MatchFinder::MatchResult& Result) {
     return;
   }
 
-  diag(LastUsage->getBeginLoc(), Type);
+  // diag(LastUsage->getBeginLoc(), Type);
   diag(LastUsage->getBeginLoc(), "Could be std::move()");
 }
 
