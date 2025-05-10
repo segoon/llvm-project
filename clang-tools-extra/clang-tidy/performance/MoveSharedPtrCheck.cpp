@@ -16,16 +16,34 @@ namespace clang::tidy::performance {
 
 using utils::decl_ref_expr::allDeclRefExprs;
 
+AST_MATCHER(Expr, isRefQualType) {
+  auto Type = Node.getType();
+  return Type != Type.getNonReferenceType();
+}
+
+AST_MATCHER(CXXRecordDecl, hasNonTrivialMoveConstructor)
+{
+  return !Node.hasTrivialMoveConstructor();
+}
+
 void MoveSharedPtrCheck::registerMatchers(MatchFinder* Finder) {
+  auto returnParent =
+      hasParent(expr(hasParent(cxxConstructExpr(hasParent(returnStmt())))));
+
   Finder->addMatcher(
       declRefExpr(
-          hasType(
-              hasCanonicalType(hasDeclaration(cxxRecordDecl().bind("canonical_decl")))),
+          // not "return x;"
+          unless(returnParent),
+
+          unless(hasType(namedDecl(hasName("::std::string_view")))),
+
+	  // only non-trivially moveable types
+          hasType(hasCanonicalType(
+              hasDeclaration(cxxRecordDecl(hasNonTrivialMoveConstructor())))),
+
           hasDeclaration(
               varDecl(hasAncestor(functionDecl().bind("func"))).bind("decl")),
-          hasParent(expr(hasParent(cxxConstructExpr())).bind("use_parent"))
-
-              )
+          hasParent(expr(hasParent(cxxConstructExpr())).bind("use_parent")))
           .bind("use"),
       this);
 }
@@ -49,16 +67,12 @@ const Expr* MoveSharedPtrCheck::getLastVarUsage(const VarDecl& Var,
 const std::string_view kSharedPtr = "class std::shared_ptr<";
 
 void MoveSharedPtrCheck::check(const MatchFinder::MatchResult& Result) {
-  const auto* MatchedCanonicalDecl = Result.Nodes.getNodeAs<CXXRecordDecl>("canonical_decl");
   const auto* MatchedDecl = Result.Nodes.getNodeAs<VarDecl>("decl");
   const auto* MatchedFunc = Result.Nodes.getNodeAs<FunctionDecl>("func");
   const auto* MatchedUse = Result.Nodes.getNodeAs<Expr>("use");
   const auto* MatchedUseCall = Result.Nodes.getNodeAs<CallExpr>("use_parent");
 
   if (MatchedUseCall) return;
-
-  if (MatchedCanonicalDecl->hasTrivialMoveConstructor())
-    return;
 
   const auto* LastUsage =
       getLastVarUsage(*MatchedDecl, *MatchedFunc, *Result.Context);
