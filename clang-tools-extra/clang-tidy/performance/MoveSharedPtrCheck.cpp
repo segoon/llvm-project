@@ -16,14 +16,9 @@ namespace clang::tidy::performance {
 
 using utils::decl_ref_expr::allDeclRefExprs;
 
-AST_MATCHER(Expr, isRefQualType) {
-  auto Type = Node.getType();
-  return Type != Type.getNonReferenceType();
-}
-
-AST_MATCHER(CXXRecordDecl, hasNonTrivialMoveConstructor)
+AST_MATCHER(CXXRecordDecl, hasTrivialMoveConstructor)
 {
-  return !Node.hasTrivialMoveConstructor();
+  return Node.hasDefinition() && Node.hasTrivialMoveConstructor();
 }
 
 void MoveSharedPtrCheck::registerMatchers(MatchFinder* Finder) {
@@ -37,12 +32,18 @@ void MoveSharedPtrCheck::registerMatchers(MatchFinder* Finder) {
 
           unless(hasType(namedDecl(hasName("::std::string_view")))),
 
-	  // only non-trivially moveable types
-          hasType(hasCanonicalType(
-              hasDeclaration(cxxRecordDecl(hasNonTrivialMoveConstructor())))),
+	  // non-trivial type
+	  hasType(hasCanonicalType(hasDeclaration(cxxRecordDecl()))),
+
+          unless(hasType(hasCanonicalType(
+              hasDeclaration(cxxRecordDecl(hasTrivialMoveConstructor()))))),
+
+	  // only non-X&
+	  unless(hasDeclaration(varDecl(hasType(qualType(lValueReferenceType()))))),
 
           hasDeclaration(
               varDecl(hasAncestor(functionDecl().bind("func"))).bind("decl")),
+
           hasParent(expr(hasParent(cxxConstructExpr())).bind("use_parent")))
           .bind("use"),
       this);
@@ -60,11 +61,8 @@ const Expr* MoveSharedPtrCheck::getLastVarUsage(const VarDecl& Var,
     if (LastExpr->getBeginLoc() < Expr->getBeginLoc()) LastExpr = Expr;
   }
 
-  // diag(LastExpr->getBeginLoc(), "last usage");
   return LastExpr;
 }
-
-const std::string_view kSharedPtr = "class std::shared_ptr<";
 
 void MoveSharedPtrCheck::check(const MatchFinder::MatchResult& Result) {
   const auto* MatchedDecl = Result.Nodes.getNodeAs<VarDecl>("decl");
