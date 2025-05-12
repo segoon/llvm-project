@@ -26,6 +26,8 @@ public:
   bool isLanguageVersionSupported(const LangOptions &LangOpts) const override {
     return LangOpts.CPlusPlus;
   }
+private:
+  const Expr* getLastVarUsage(const VarDecl& Var, const Decl& Func, ASTContext& Context);
 };
 
 } // namespace clang::tidy::performance

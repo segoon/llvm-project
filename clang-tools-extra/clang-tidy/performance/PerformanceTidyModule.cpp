@@ -20,7 +20,6 @@
 #include "LostStdMoveCheck.h"
 #include "MoveConstArgCheck.h"
 #include "MoveConstructorInitCheck.h"
-#include "MoveSharedPtrCheck.h"
 #include "NoAutomaticMoveCheck.h"
 #include "NoIntToPtrCheck.h"
 #include "NoexceptDestructorCheck.h"
@@ -57,8 +56,6 @@ public:
         "performance-move-const-arg");
     CheckFactories.registerCheck<MoveConstructorInitCheck>(
         "performance-move-constructor-init");
-    CheckFactories.registerCheck<MoveSharedPtrCheck>(
-        "performance-move-shared-ptr");
     CheckFactories.registerCheck<NoAutomaticMoveCheck>(
         "performance-no-automatic-move");
     CheckFactories.registerCheck<NoIntToPtrCheck>("performance-no-int-to-ptr");

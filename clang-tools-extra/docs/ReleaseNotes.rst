@@ -218,11 +218,6 @@ New checks
   Gives warnings for tagged unions, where the number of tags is
   different from the number of data members inside the union.
 
-- New :doc:`misc-dangling-ref-utils-async
-  <clang-tidy/checks/misc/dangling-ref-utils-async>` check.
-
-  Find dangling refs with utils::Async().
-
 - New :doc:`modernize-use-integer-sign-comparison
   <clang-tidy/checks/modernize/use-integer-sign-comparison>` check.
 
@@ -233,11 +228,6 @@ New checks
   <clang-tidy/checks/performance/lost-std-move>` check.
 
   Search for lost std::move().
-
-- New :doc:`performance-move-shared-ptr
-  <clang-tidy/checks/performance/move-shared-ptr>` check.
-
-  adds std::move() to std::shared_ptr.
 
 - New :doc:`portability-template-virtual-member-function
   <clang-tidy/checks/portability/template-virtual-member-function>` check.
