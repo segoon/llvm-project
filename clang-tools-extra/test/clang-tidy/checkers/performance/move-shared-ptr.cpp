@@ -17,7 +17,7 @@ T&& move(T&)
 
 } // namespace std
 
-void f(std::shared_ptr<int>);
+int f(std::shared_ptr<int>);
 
 void f_arg(std::shared_ptr<int> ptr)
 {
@@ -105,4 +105,10 @@ void f_cycle4()
   do {
     f(ptr);
   } while (*ptr);
+}
+
+int f_multiple_args()
+{
+  std::shared_ptr<int> ptr;
+  return f(ptr) + f(ptr);
 }

@@ -338,9 +338,10 @@ Clang-Tidy Checks
    :doc:`performance-inefficient-algorithm <performance/inefficient-algorithm>`, "Yes"
    :doc:`performance-inefficient-string-concatenation <performance/inefficient-string-concatenation>`,
    :doc:`performance-inefficient-vector-operation <performance/inefficient-vector-operation>`, "Yes"
+   :doc:`performance-lost-std-move <performance/lost-std-move>`, "Yes"
    :doc:`performance-move-const-arg <performance/move-const-arg>`, "Yes"
    :doc:`performance-move-constructor-init <performance/move-constructor-init>`,
-   :doc:`performance-move-shared-ptr <performance/move-shared-ptr>`, "Yes"
+   :doc:`performance-move-shared-ptr <performance/move-shared-ptr>`,
    :doc:`performance-no-automatic-move <performance/no-automatic-move>`,
    :doc:`performance-no-int-to-ptr <performance/no-int-to-ptr>`,
    :doc:`performance-noexcept-destructor <performance/noexcept-destructor>`, "Yes"

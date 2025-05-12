@@ -229,6 +229,11 @@ New checks
   Replace comparisons between signed and unsigned integers with their safe
   C++20 ``std::cmp_*`` alternative, if available.
 
+- New :doc:`performance-lost-std-move
+  <clang-tidy/checks/performance/lost-std-move>` check.
+
+  Search for lost std::move().
+
 - New :doc:`performance-move-shared-ptr
   <clang-tidy/checks/performance/move-shared-ptr>` check.
 
