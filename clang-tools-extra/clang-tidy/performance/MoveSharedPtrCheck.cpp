@@ -35,8 +35,14 @@ void MoveSharedPtrCheck::registerMatchers(MatchFinder* Finder) {
 	  // non-trivial type
 	  hasType(hasCanonicalType(hasDeclaration(cxxRecordDecl()))),
 
+	  // non-trivial X(X&&)
           unless(hasType(hasCanonicalType(
               hasDeclaration(cxxRecordDecl(hasTrivialMoveConstructor()))))),
+
+	  // Not in a cycle
+	  unless(hasAncestor(forStmt())),
+	  unless(hasAncestor(doStmt())),
+	  unless(hasAncestor(whileStmt())),
 
 	  // only non-X&
 	  unless(hasDeclaration(varDecl(hasType(qualType(lValueReferenceType()))))),

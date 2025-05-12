@@ -1,13 +1,13 @@
 // RUN: %check_clang_tidy %s performance-move-shared-ptr %t
 
 namespace std {
+
 template<typename T>
 class shared_ptr {
 public:
   T& operator*() { return reinterpret_cast<T&>(*this); }
-shared_ptr() {}
-shared_ptr(const shared_ptr<T>&) {}
-private:
+  shared_ptr() {}
+  shared_ptr(const shared_ptr<T>&) {}
 };
 
 template<typename T>
@@ -75,4 +75,34 @@ void f_still_used(std::shared_ptr<int> ptr)
 
   *ptr = 1;
   *ptr = *ptr;
+}
+
+void f_cycle1()
+{
+  std::shared_ptr<int> ptr;
+  for(;;)
+    f(ptr);
+}
+
+void f_cycle2()
+{
+  std::shared_ptr<int> ptr;
+  for(int i=0; i<5; i++)
+    f(ptr);
+}
+
+void f_cycle3()
+{
+  std::shared_ptr<int> ptr;
+  while (*ptr) {
+    f(ptr);
+  }
+}
+
+void f_cycle4()
+{
+  std::shared_ptr<int> ptr;
+  do {
+    f(ptr);
+  } while (*ptr);
 }
