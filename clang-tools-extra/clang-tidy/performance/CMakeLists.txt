@@ -15,7 +15,6 @@ add_clang_library(clangTidyPerformanceModule STATIC
   LostStdMoveCheck.cpp
   MoveConstArgCheck.cpp
   MoveConstructorInitCheck.cpp
-  MoveSharedPtrCheck.cpp
   NoAutomaticMoveCheck.cpp
   NoIntToPtrCheck.cpp
   NoexceptDestructorCheck.cpp
