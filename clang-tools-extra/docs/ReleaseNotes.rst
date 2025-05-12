@@ -133,7 +133,7 @@ New checks
 - New :doc:`performance-lost-std-move
   <clang-tidy/checks/performance/lost-std-move>` check.
 
-  Searches for lost ``std::move()``.
+  Warns if copy constructor is used instead of ``std::move()``.
 
 - New :doc:`readability-ambiguous-smartptr-reset-call
   <clang-tidy/checks/readability/ambiguous-smartptr-reset-call>` check.

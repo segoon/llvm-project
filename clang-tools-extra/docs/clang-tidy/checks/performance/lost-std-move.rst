@@ -3,7 +3,7 @@
 performance-lost-std-move
 =========================
 
-The check warns if copy constructor is used instead of std::move().
+Warns if copy constructor is used instead of ``std::move()``.
 
 .. code-block:: c++
 
