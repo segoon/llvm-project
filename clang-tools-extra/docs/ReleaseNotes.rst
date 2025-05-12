@@ -133,7 +133,7 @@ New checks
 - New :doc:`performance-lost-std-move
   <clang-tidy/checks/performance/lost-std-move>` check.
 
-  Searches for lost std::move().
+  Searches for lost ``std::move()``.
 
 - New :doc:`readability-ambiguous-smartptr-reset-call
   <clang-tidy/checks/readability/ambiguous-smartptr-reset-call>` check.

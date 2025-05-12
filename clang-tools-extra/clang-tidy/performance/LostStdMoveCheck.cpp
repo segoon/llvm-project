@@ -63,7 +63,7 @@ void LostStdMoveCheck::registerMatchers(MatchFinder *Finder) {
 const Expr *LostStdMoveCheck::getLastVarUsage(const VarDecl &Var,
                                               const Decl &Func,
                                               ASTContext &Context) {
-  auto Exprs = allDeclRefExprs(Var, Func, Context);
+  llvm::SmallPtrSet<const DeclRefExpr *, 16> Exprs = allDeclRefExprs(Var, Func, Context);
 
   const Expr *LastExpr = nullptr;
   for (const auto &Expr : Exprs) {
@@ -95,7 +95,7 @@ void LostStdMoveCheck::check(const MatchFinder::MatchResult &Result) {
   if (MatchedUseCall)
     return;
 
-  const auto *LastUsage =
+  const Expr *LastUsage =
       getLastVarUsage(*MatchedDecl, *MatchedFunc, *Result.Context);
   if (LastUsage == nullptr)
     return;
