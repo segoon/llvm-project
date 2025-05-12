@@ -25,7 +25,8 @@ void LostStdMoveCheck::registerMatchers(MatchFinder *Finder) {
       hasParent(expr(hasParent(cxxConstructExpr(hasParent(returnStmt())))));
 
   auto outermostExpr = expr(unless(hasParent(expr())));
-  auto leafStatement = stmt(outermostExpr, unless(hasDescendant(outermostExpr)));
+  auto leafStatement =
+      stmt(outermostExpr, unless(hasDescendant(outermostExpr)));
 
   Finder->addMatcher(
       declRefExpr(
@@ -49,7 +50,7 @@ void LostStdMoveCheck::registerMatchers(MatchFinder *Finder) {
           unless(hasDeclaration(
               varDecl(hasType(qualType(lValueReferenceType()))))),
 
-	  hasAncestor(leafStatement.bind("leaf_statement")),
+          hasAncestor(leafStatement.bind("leaf_statement")),
 
           hasDeclaration(
               varDecl(hasAncestor(functionDecl().bind("func"))).bind("decl")),
@@ -88,7 +89,8 @@ void LostStdMoveCheck::check(const MatchFinder::MatchResult &Result) {
   const auto *MatchedFunc = Result.Nodes.getNodeAs<FunctionDecl>("func");
   const auto *MatchedUse = Result.Nodes.getNodeAs<Expr>("use");
   const auto *MatchedUseCall = Result.Nodes.getNodeAs<CallExpr>("use_parent");
-  const auto *MatchedLeafStatement = Result.Nodes.getNodeAs<Stmt>("leaf_statement");
+  const auto *MatchedLeafStatement =
+      Result.Nodes.getNodeAs<Stmt>("leaf_statement");
 
   if (MatchedUseCall)
     return;
@@ -105,7 +107,9 @@ void LostStdMoveCheck::check(const MatchFinder::MatchResult &Result) {
 
   // Calculate X usage count in the statement
   llvm::SmallPtrSet<const DeclRefExpr *, 16> DeclRefs;
-  auto Matches = match(findAll(declRefExpr(to(varDecl(equalsNode(MatchedDecl)))).bind("ref")), *MatchedLeafStatement, *Result.Context);
+  auto Matches = match(
+      findAll(declRefExpr(to(varDecl(equalsNode(MatchedDecl)))).bind("ref")),
+      *MatchedLeafStatement, *Result.Context);
   extractNodesByIdTo(Matches, "ref", DeclRefs);
   if (DeclRefs.size() > 1) {
     // Unspecified order of evaluation, e.g. f(x, x)
