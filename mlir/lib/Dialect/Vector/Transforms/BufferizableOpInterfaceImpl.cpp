@@ -52,7 +52,7 @@ struct TransferReadOpInterface
     auto readOp = cast<vector::TransferReadOp>(op);
     assert(isa<TensorType>(readOp.getShapedType()) &&
            "only tensor types expected");
-    FailureOr<Value> buffer = getBuffer(rewriter, readOp.getSource(), options);
+    FailureOr<Value> buffer = getBuffer(rewriter, readOp.getBase(), options);
     if (failed(buffer))
       return failure();
     replaceOpWithNewBufferizedOp<vector::TransferReadOp>(
@@ -110,7 +110,7 @@ struct TransferWriteOpInterface
 
     // Create a new transfer_write on buffer that doesn't have a return value.
     FailureOr<Value> resultBuffer =
-        getBuffer(rewriter, writeOp.getSource(), options);
+        getBuffer(rewriter, writeOp.getBase(), options);
     if (failed(resultBuffer))
       return failure();
     rewriter.create<vector::TransferWriteOp>(
@@ -217,8 +217,7 @@ struct MaskOpInterface
     SmallVector<Value> newReturnValues(maskOp->getNumResults(), Value());
     SmallVector<Value> newYieldedValues;
     for (const auto &it : llvm::enumerate(yieldOp.getOperands())) {
-      if (llvm::find(maskedOp->getOpResults(), it.value()) !=
-          maskedOp->getOpResults().end()) {
+      if (llvm::is_contained(maskedOp->getOpResults(), it.value())) {
         newYieldedValues.push_back(it.value());
       } else {
         // This used to be a tensor result of the masked op, but is now a memref
@@ -226,7 +225,7 @@ struct MaskOpInterface
         newReturnValues[it.index()] = it.value();
       }
     }
-    rewriter.updateRootInPlace(yieldOp, [&]() {
+    rewriter.modifyOpInPlace(yieldOp, [&]() {
       yieldOp.getOperandsMutable().assign(newYieldedValues);
     });
 

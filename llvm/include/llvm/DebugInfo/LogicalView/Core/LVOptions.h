@@ -41,7 +41,9 @@ namespace logicalview {
 // Generate get and set 'std::string' functions.
 #define STD_STRING_FUNCTION(FAMILY, FIELD)                                     \
   std::string get##FAMILY##FIELD() const { return FAMILY.FIELD; }              \
-  void set##FAMILY##FIELD(std::string FIELD) { FAMILY.FIELD = FIELD; }         \
+  void set##FAMILY##FIELD(std::string FIELD) {                                 \
+    FAMILY.FIELD = std::move(FIELD);                                           \
+  }                                                                            \
   void reset##FAMILY##FIELD() { FAMILY.FIELD = ""; }
 
 // Generate get and set 'std::set' functions.
@@ -50,11 +52,7 @@ namespace logicalview {
     return FAMILY.SET.find(TYPE::FIELD) != FAMILY.SET.end();                   \
   }                                                                            \
   void set##FAMILY##FIELD() { FAMILY.SET.insert(TYPE::FIELD); }                \
-  void reset##FAMILY##FIELD() {                                                \
-    std::set<TYPE>::iterator Iter = FAMILY.SET.find(TYPE::FIELD);              \
-    if (Iter != FAMILY.SET.end())                                              \
-      FAMILY.SET.erase(Iter);                                                  \
-  }
+  void reset##FAMILY##FIELD() { FAMILY.SET.erase(TYPE::FIELD); }
 
 #define STDSET_FUNCTION_5(FAMILY, FIELD, ENTRY, TYPE, SET)                     \
   bool get##FAMILY##FIELD##ENTRY() const {                                     \
@@ -510,14 +508,14 @@ class LVPatterns final {
   template <typename T, typename U>
   void resolveGenericPatternMatch(T *Element, const U &Requests) {
     assert(Element && "Element must not be nullptr");
-    auto CheckPattern = [=]() -> bool {
+    auto CheckPattern = [this, Element]() -> bool {
       return (Element->isNamed() &&
               (matchGenericPattern(Element->getName()) ||
                matchGenericPattern(Element->getLinkageName()))) ||
              (Element->isTyped() &&
               matchGenericPattern(Element->getTypeName()));
     };
-    auto CheckOffset = [=]() -> bool {
+    auto CheckOffset = [this, Element]() -> bool {
       return matchOffsetPattern(Element->getOffset());
     };
     if ((options().getSelectGenericPattern() && CheckPattern()) ||
@@ -530,12 +528,12 @@ class LVPatterns final {
   template <typename U>
   void resolveGenericPatternMatch(LVLine *Line, const U &Requests) {
     assert(Line && "Line must not be nullptr");
-    auto CheckPattern = [=]() -> bool {
+    auto CheckPattern = [this, Line]() -> bool {
       return matchGenericPattern(Line->lineNumberAsStringStripped()) ||
              matchGenericPattern(Line->getName()) ||
              matchGenericPattern(Line->getPathname());
     };
-    auto CheckOffset = [=]() -> bool {
+    auto CheckOffset = [this, Line]() -> bool {
       return matchOffsetPattern(Line->getAddress());
     };
     if ((options().getSelectGenericPattern() && CheckPattern()) ||

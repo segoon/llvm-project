@@ -9,7 +9,6 @@ import lldbdap_testcase
 
 
 class TestDAP_stop_hooks(lldbdap_testcase.DAPTestCaseBase):
-    @skipIfRemote
     def test_stop_hooks_before_run(self):
         """
         Test that there is no race condition between lldb-dap and
@@ -20,7 +19,7 @@ class TestDAP_stop_hooks(lldbdap_testcase.DAPTestCaseBase):
         self.build_and_launch(program, stopOnEntry=True, preRunCommands=preRunCommands)
 
         # The first stop is on entry.
-        self.continue_to_next_stop()
+        self.dap_server.wait_for_stopped()
 
         breakpoint_ids = self.set_function_breakpoints(["main"])
         # This request hangs if the race happens, because, in that case, the

@@ -18,7 +18,6 @@
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Errc.h"
-#include <map>
 
 #undef  DEBUG_TYPE
 #define DEBUG_TYPE "bolt-prof"
@@ -126,6 +125,13 @@ uint64_t FuncSampleData::getSamples(uint64_t Start, uint64_t End) const {
             E = llvm::lower_bound(Data, End, Compare());
        I != E; ++I)
     Result += I->Hits;
+  return Result;
+}
+
+uint64_t FuncSampleData::getSamples() const {
+  uint64_t Result = 0;
+  for (const SampleInfo &I : Data)
+    Result += I.Hits;
   return Result;
 }
 
@@ -599,8 +605,6 @@ void DataReader::readSampleData(BinaryFunction &BF) {
   }
 
   BF.ExecutionCount = TotalEntryCount;
-
-  estimateEdgeCounts(BF);
 }
 
 void DataReader::convertBranchData(BinaryFunction &BF) const {
@@ -776,6 +780,7 @@ bool DataReader::recordBranch(BinaryFunction &BF, uint64_t From, uint64_t To,
     if (collectedInBoltedBinary() && FromBB == ToBB)
       return true;
 
+    // Allow passthrough blocks.
     BinaryBasicBlock *FTSuccessor = FromBB->getConditionalSuccessor(false);
     if (FTSuccessor && FTSuccessor->succ_size() == 1 &&
         FTSuccessor->getSuccessor(ToBB->getLabel())) {
@@ -1030,9 +1035,8 @@ ErrorOr<SampleInfo> DataReader::parseSampleInfo() {
 }
 
 ErrorOr<bool> DataReader::maybeParseNoLBRFlag() {
-  if (ParsingBuf.size() < 6 || ParsingBuf.substr(0, 6) != "no_lbr")
+  if (!ParsingBuf.consume_front("no_lbr"))
     return false;
-  ParsingBuf = ParsingBuf.drop_front(6);
   Col += 6;
 
   if (ParsingBuf.size() > 0 && ParsingBuf[0] == ' ')
@@ -1053,9 +1057,8 @@ ErrorOr<bool> DataReader::maybeParseNoLBRFlag() {
 }
 
 ErrorOr<bool> DataReader::maybeParseBATFlag() {
-  if (ParsingBuf.size() < 16 || ParsingBuf.substr(0, 16) != "boltedcollection")
+  if (!ParsingBuf.consume_front("boltedcollection"))
     return false;
-  ParsingBuf = ParsingBuf.drop_front(16);
   Col += 16;
 
   if (!checkAndConsumeNewLine()) {
@@ -1206,8 +1209,7 @@ std::error_code DataReader::parse() {
 
     // Add entry data for branches to another function or branches
     // to entry points (including recursive calls)
-    if (BI.To.IsSymbol &&
-        (!BI.From.Name.equals(BI.To.Name) || BI.To.Offset == 0)) {
+    if (BI.To.IsSymbol && (BI.From.Name != BI.To.Name || BI.To.Offset == 0)) {
       I = GetOrCreateFuncEntry(BI.To.Name);
       I->second.EntryData.emplace_back(std::move(BI));
     }

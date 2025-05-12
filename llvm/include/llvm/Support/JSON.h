@@ -47,9 +47,10 @@
 #define LLVM_SUPPORT_JSON_H
 
 #include "llvm/ADT/DenseMap.h"
+#include "llvm/ADT/STLFunctionalExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/STLFunctionalExtras.h"
+#include "llvm/Support/Compiler.h"
 #include "llvm/Support/Error.h"
 #include "llvm/Support/FormatVariadic.h"
 #include "llvm/Support/raw_ostream.h"
@@ -471,6 +472,14 @@ public:
     return LLVM_LIKELY(Type == T_Array) ? &as<json::Array>() : nullptr;
   }
 
+  void print(llvm::raw_ostream &OS) const;
+#if !defined(NDEBUG) || defined(LLVM_ENABLE_DUMP)
+  LLVM_DUMP_METHOD void dump() const {
+    print(llvm::dbgs());
+    llvm::dbgs() << '\n';
+  }
+#endif // !NDEBUG || LLVM_ENABLE_DUMP
+
 private:
   void destroy();
   void copyFrom(const Value &M);
@@ -482,6 +491,18 @@ private:
   friend class Object;
 
   template <typename T, typename... U> void create(U &&... V) {
+#if LLVM_ADDRESS_SANITIZER_BUILD
+    // Unpoisoning to prevent overwriting poisoned object (e.g., annotated short
+    // string). Objects that have had their memory poisoned may cause an ASan
+    // error if their memory is reused without calling their destructor.
+    // Unpoisoning the memory prevents this error from occurring.
+    // FIXME: This is a temporary solution to prevent buildbots from failing.
+    //  The more appropriate approach would be to call the object's destructor
+    //  to unpoison memory. This would prevent any potential memory leaks (long
+    //  strings). Read for details:
+    //  https://github.com/llvm/llvm-project/pull/79065#discussion_r1462621761
+    __asan_unpoison_memory_region(&Union, sizeof(T));
+#endif
     new (reinterpret_cast<T *>(&Union)) T(std::forward<U>(V)...);
   }
   template <typename T> T &as() const {
@@ -634,6 +655,8 @@ inline bool Object::erase(StringRef K) {
   return M.erase(ObjectKey(K));
 }
 
+std::vector<const Object::value_type *> sortedElements(const Object &O);
+
 /// A "cursor" marking a position within a Value.
 /// The Value is a tree, and this is the path from the root to the current node.
 /// This is used to associate errors with particular subobjects.
@@ -751,6 +774,14 @@ inline bool fromJSON(const Value &E, bool &Out, Path P) {
     return true;
   }
   P.report("expected boolean");
+  return false;
+}
+inline bool fromJSON(const Value &E, unsigned int &Out, Path P) {
+  if (auto S = E.getAsInteger()) {
+    Out = *S;
+    return true;
+  }
+  P.report("expected unsigned integer");
   return false;
 }
 inline bool fromJSON(const Value &E, uint64_t &Out, Path P) {

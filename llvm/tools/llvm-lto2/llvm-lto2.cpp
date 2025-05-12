@@ -130,7 +130,7 @@ static cl::opt<bool> RemarksWithHotness(
     cl::desc("With PGO, include profile count in optimization remarks"),
     cl::Hidden);
 
-cl::opt<std::optional<uint64_t>, false, remarks::HotnessThresholdParser>
+static cl::opt<std::optional<uint64_t>, false, remarks::HotnessThresholdParser>
     RemarksHotnessThreshold(
         "pass-remarks-hotness-threshold",
         cl::desc("Minimum profile count required for an "
@@ -187,6 +187,18 @@ static cl::opt<bool> EnableFreestanding(
     cl::desc("Enable Freestanding (disable builtins / TLI) during LTO"),
     cl::Hidden);
 
+static cl::opt<bool> WholeProgramVisibilityEnabledInLTO(
+    "whole-program-visibility-enabled-in-lto",
+    cl::desc("Enable whole program visibility during LTO"), cl::Hidden);
+
+static cl::opt<bool> ValidateAllVtablesHaveTypeInfos(
+    "validate-all-vtables-have-type-infos",
+    cl::desc("Validate that all vtables have type infos in LTO"), cl::Hidden);
+
+static cl::opt<bool>
+    AllVtablesHaveTypeInfos("all-vtables-have-type-infos", cl::Hidden,
+                            cl::desc("All vtables have type infos"));
+
 static void check(Error E, std::string Msg) {
   if (!E)
     return;
@@ -228,10 +240,9 @@ static int run(int argc, char **argv) {
   // resolutions and apply them in the order observed.
   std::map<std::pair<std::string, std::string>, std::list<SymbolResolution>>
       CommandLineResolutions;
-  for (std::string R : SymbolResolutions) {
-    StringRef Rest = R;
-    StringRef FileName, SymbolName;
-    std::tie(FileName, Rest) = Rest.split(',');
+  for (StringRef R : SymbolResolutions) {
+    StringRef Rest, FileName, SymbolName;
+    std::tie(FileName, Rest) = R.split(',');
     if (Rest.empty()) {
       llvm::errs() << "invalid resolution: " << R << '\n';
       return 1;
@@ -304,8 +315,7 @@ static int run(int argc, char **argv) {
 
   Conf.OptLevel = OptLevel - '0';
   Conf.Freestanding = EnableFreestanding;
-  for (auto &PluginFN : PassPlugins)
-    Conf.PassPlugins.push_back(PluginFN);
+  llvm::append_range(Conf.PassPlugins, PassPlugins);
   if (auto Level = CodeGenOpt::parseLevel(CGOptLevel)) {
     Conf.CGOptLevel = *Level;
   } else {
@@ -322,9 +332,17 @@ static int run(int argc, char **argv) {
   Conf.PTO.LoopVectorization = Conf.OptLevel > 1;
   Conf.PTO.SLPVectorization = Conf.OptLevel > 1;
 
+  if (WholeProgramVisibilityEnabledInLTO.getNumOccurrences() > 0)
+    Conf.HasWholeProgramVisibility = WholeProgramVisibilityEnabledInLTO;
+  if (ValidateAllVtablesHaveTypeInfos.getNumOccurrences() > 0)
+    Conf.ValidateAllVtablesHaveTypeInfos = ValidateAllVtablesHaveTypeInfos;
+  if (AllVtablesHaveTypeInfos.getNumOccurrences() > 0)
+    Conf.AllVtablesHaveTypeInfos = AllVtablesHaveTypeInfos;
+
   ThinBackend Backend;
   if (ThinLTODistributedIndexes)
-    Backend = createWriteIndexesThinBackend(/*OldPrefix=*/"",
+    Backend = createWriteIndexesThinBackend(llvm::hardware_concurrency(Threads),
+                                            /*OldPrefix=*/"",
                                             /*NewPrefix=*/"",
                                             /*NativeObjectPrefix=*/"",
                                             ThinLTOEmitImports,
@@ -425,7 +443,9 @@ static int run(int argc, char **argv) {
 
   auto AddBuffer = [&](size_t Task, const Twine &ModuleName,
                        std::unique_ptr<MemoryBuffer> MB) {
-    *AddStream(Task, ModuleName)->OS << MB->getBuffer();
+    auto Stream = AddStream(Task, ModuleName);
+    *Stream->OS << MB->getBuffer();
+    check(Stream->commit(), "Failed to commit cache");
   };
 
   FileCache Cache;

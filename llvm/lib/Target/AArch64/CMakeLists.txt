@@ -7,7 +7,8 @@ tablegen(LLVM AArch64GenAsmWriter.inc -gen-asm-writer)
 tablegen(LLVM AArch64GenAsmWriter1.inc -gen-asm-writer -asmwriternum=1)
 tablegen(LLVM AArch64GenCallingConv.inc -gen-callingconv)
 tablegen(LLVM AArch64GenDAGISel.inc -gen-dag-isel)
-tablegen(LLVM AArch64GenDisassemblerTables.inc -gen-disassembler)
+tablegen(LLVM AArch64GenDisassemblerTables.inc -gen-disassembler
+              --large-decoder-table)
 tablegen(LLVM AArch64GenFastISel.inc -gen-fast-isel)
 tablegen(LLVM AArch64GenGlobalISel.inc -gen-global-isel)
 tablegen(LLVM AArch64GenO0PreLegalizeGICombiner.inc -gen-global-isel-combiner
@@ -42,6 +43,7 @@ add_llvm_target(AArch64CodeGen
   GISel/AArch64RegisterBankInfo.cpp
   AArch64A57FPLoadBalancing.cpp
   AArch64AdvSIMDScalarPass.cpp
+  AArch64Arm64ECCallLowering.cpp
   AArch64AsmPrinter.cpp
   AArch64BranchTargets.cpp
   AArch64CallingConvention.cpp
@@ -56,7 +58,6 @@ add_llvm_target(AArch64CodeGen
   AArch64FastISel.cpp
   AArch64A53Fix835769.cpp
   AArch64FrameLowering.cpp
-  AArch64GlobalsTagging.cpp
   AArch64CompressJumpTables.cpp
   AArch64ConditionOptimizer.cpp
   AArch64RedundantCopyElimination.cpp
@@ -71,6 +72,7 @@ add_llvm_target(AArch64CodeGen
   AArch64MIPeepholeOpt.cpp
   AArch64MCInstLower.cpp
   AArch64PointerAuth.cpp
+  AArch64PostCoalescerPass.cpp
   AArch64PromoteConstant.cpp
   AArch64PBQPRegAlloc.cpp
   AArch64RegisterInfo.cpp
@@ -85,6 +87,7 @@ add_llvm_target(AArch64CodeGen
   AArch64TargetObjectFile.cpp
   AArch64TargetTransformInfo.cpp
   SMEABIPass.cpp
+  SMEPeepholeOpt.cpp
   SVEIntrinsicOpts.cpp
   AArch64SIMDInstrOpt.cpp
 
@@ -109,6 +112,7 @@ add_llvm_target(AArch64CodeGen
   Target
   TargetParser
   TransformUtils
+  Vectorize
 
   ADD_TO_COMPONENT
   AArch64

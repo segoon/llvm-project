@@ -57,7 +57,6 @@
 #include <optional>
 
 namespace llvm {
-class Module;
 
 namespace IRSimilarity {
 
@@ -264,37 +263,35 @@ struct IRInstructionData
       OperTypes.push_back(V->getType());
 
     if (isa<CmpInst>(ID.Inst))
-      return llvm::hash_combine(
-          llvm::hash_value(ID.Inst->getOpcode()),
-          llvm::hash_value(ID.Inst->getType()),
-          llvm::hash_value(ID.getPredicate()),
-          llvm::hash_combine_range(OperTypes.begin(), OperTypes.end()));
+      return llvm::hash_combine(llvm::hash_value(ID.Inst->getOpcode()),
+                                llvm::hash_value(ID.Inst->getType()),
+                                llvm::hash_value(ID.getPredicate()),
+                                llvm::hash_combine_range(OperTypes));
 
     if (IntrinsicInst *II = dyn_cast<IntrinsicInst>(ID.Inst)) {
       // To hash intrinsics, we use the opcode, and types like the other
       // instructions, but also, the Intrinsic ID, and the Name of the
       // intrinsic.
       Intrinsic::ID IntrinsicID = II->getIntrinsicID();
-      return llvm::hash_combine(
-          llvm::hash_value(ID.Inst->getOpcode()),
-          llvm::hash_value(ID.Inst->getType()), llvm::hash_value(IntrinsicID),
-          llvm::hash_value(*ID.CalleeName),
-          llvm::hash_combine_range(OperTypes.begin(), OperTypes.end()));
+      return llvm::hash_combine(llvm::hash_value(ID.Inst->getOpcode()),
+                                llvm::hash_value(ID.Inst->getType()),
+                                llvm::hash_value(IntrinsicID),
+                                llvm::hash_value(*ID.CalleeName),
+                                llvm::hash_combine_range(OperTypes));
     }
 
     if (isa<CallInst>(ID.Inst)) {
       std::string FunctionName = *ID.CalleeName;
-      return llvm::hash_combine(
-          llvm::hash_value(ID.Inst->getOpcode()),
-          llvm::hash_value(ID.Inst->getType()),
-          llvm::hash_value(ID.Inst->getType()), llvm::hash_value(FunctionName),
-          llvm::hash_combine_range(OperTypes.begin(), OperTypes.end()));
+      return llvm::hash_combine(llvm::hash_value(ID.Inst->getOpcode()),
+                                llvm::hash_value(ID.Inst->getType()),
+                                llvm::hash_value(ID.Inst->getType()),
+                                llvm::hash_value(FunctionName),
+                                llvm::hash_combine_range(OperTypes));
     }
 
-    return llvm::hash_combine(
-        llvm::hash_value(ID.Inst->getOpcode()),
-        llvm::hash_value(ID.Inst->getType()),
-        llvm::hash_combine_range(OperTypes.begin(), OperTypes.end()));
+    return llvm::hash_combine(llvm::hash_value(ID.Inst->getOpcode()),
+                              llvm::hash_value(ID.Inst->getType()),
+                              llvm::hash_combine_range(OperTypes));
   }
 
   IRInstructionDataList *IDL = nullptr;
@@ -1198,6 +1195,7 @@ class IRSimilarityAnalysisPrinterPass
 public:
   explicit IRSimilarityAnalysisPrinterPass(raw_ostream &OS) : OS(OS) {}
   PreservedAnalyses run(Module &M, ModuleAnalysisManager &AM);
+  static bool isRequired() { return true; }
 };
 
 } // end namespace llvm

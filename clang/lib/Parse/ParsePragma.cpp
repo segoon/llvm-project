@@ -11,16 +11,19 @@
 //===----------------------------------------------------------------------===//
 
 #include "clang/AST/ASTContext.h"
+#include "clang/Basic/DiagnosticParse.h"
 #include "clang/Basic/PragmaKinds.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Lex/Token.h"
 #include "clang/Parse/LoopHint.h"
-#include "clang/Parse/ParseDiagnostic.h"
 #include "clang/Parse/Parser.h"
 #include "clang/Parse/RAIIObjectsForParser.h"
 #include "clang/Sema/EnterExpressionEvaluationContext.h"
 #include "clang/Sema/Scope.h"
+#include "clang/Sema/SemaCUDA.h"
+#include "clang/Sema/SemaCodeCompletion.h"
+#include "clang/Sema/SemaRISCV.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringSwitch.h"
 #include <optional>
@@ -751,9 +754,8 @@ void Parser::HandlePragmaMSStruct() {
 
 void Parser::HandlePragmaAlign() {
   assert(Tok.is(tok::annot_pragma_align));
-  Sema::PragmaOptionsAlignKind Kind =
-    static_cast<Sema::PragmaOptionsAlignKind>(
-    reinterpret_cast<uintptr_t>(Tok.getAnnotationValue()));
+  PragmaOptionsAlignKind Kind = static_cast<PragmaOptionsAlignKind>(
+      reinterpret_cast<uintptr_t>(Tok.getAnnotationValue()));
   Actions.ActOnPragmaOptionsAlign(Kind, Tok.getLocation());
   // Consume the token after processing the pragma to enable pragma-specific
   // #include warnings.
@@ -844,6 +846,11 @@ void Parser::HandlePragmaFPContract() {
     FPC = LangOptions::FPM_Off;
     break;
   case tok::OOS_DEFAULT:
+    // According to ISO C99 standard chapter 7.3.4, the default value
+    // for the pragma is ``off'. '-fcomplex-arithmetic=basic',
+    // '-fcx-limited-range', '-fcx-fortran-rules' and
+    // '-fcomplex-arithmetic=improved' control the default value of these
+    // pragmas.
     FPC = getLangOpts().getDefaultFPContractMode();
     break;
   }
@@ -909,15 +916,15 @@ void Parser::HandlePragmaCXLimitedRange() {
   LangOptions::ComplexRangeKind Range;
   switch (OOS) {
   case tok::OOS_ON:
-    Range = LangOptions::CX_Limited;
+    Range = LangOptions::CX_Basic;
     break;
   case tok::OOS_OFF:
     Range = LangOptions::CX_Full;
     break;
   case tok::OOS_DEFAULT:
     // According to ISO C99 standard chapter 7.3.4, the default value
-    // for the pragma is ``off'. -fcx-limited-range and -fcx-fortran-rules
-    // control the default value of these pragmas.
+    // for the pragma is ``off'. -fcomplex-arithmetic controls the default value
+    // of these pragmas.
     Range = getLangOpts().getComplexRange();
     break;
   }
@@ -1411,16 +1418,16 @@ bool Parser::HandlePragmaLoopHint(LoopHint &Hint) {
       static_cast<PragmaLoopHintInfo *>(Tok.getAnnotationValue());
 
   IdentifierInfo *PragmaNameInfo = Info->PragmaName.getIdentifierInfo();
-  Hint.PragmaNameLoc = IdentifierLoc::create(
-      Actions.Context, Info->PragmaName.getLocation(), PragmaNameInfo);
+  Hint.PragmaNameLoc = new (Actions.Context)
+      IdentifierLoc(Info->PragmaName.getLocation(), PragmaNameInfo);
 
   // It is possible that the loop hint has no option identifier, such as
   // #pragma unroll(4).
   IdentifierInfo *OptionInfo = Info->Option.is(tok::identifier)
                                    ? Info->Option.getIdentifierInfo()
                                    : nullptr;
-  Hint.OptionLoc = IdentifierLoc::create(
-      Actions.Context, Info->Option.getLocation(), OptionInfo);
+  Hint.OptionLoc = new (Actions.Context)
+      IdentifierLoc(Info->Option.getLocation(), OptionInfo);
 
   llvm::ArrayRef<Token> Toks = Info->Toks;
 
@@ -1500,7 +1507,7 @@ bool Parser::HandlePragmaLoopHint(LoopHint &Hint) {
     if (Toks.size() > 2)
       Diag(Tok.getLocation(), diag::warn_pragma_extra_tokens_at_eol)
           << PragmaLoopHintString(Info->PragmaName, Info->Option);
-    Hint.StateLoc = IdentifierLoc::create(Actions.Context, StateLoc, StateInfo);
+    Hint.StateLoc = new (Actions.Context) IdentifierLoc(StateLoc, StateInfo);
   } else if (OptionInfo && OptionInfo->getName() == "vectorize_width") {
     PP.EnterTokenStream(Toks, /*DisableMacroExpansion=*/false,
                         /*IsReinject=*/false);
@@ -1521,8 +1528,7 @@ bool Parser::HandlePragmaLoopHint(LoopHint &Hint) {
           ConsumeAnyToken();
       }
 
-      Hint.StateLoc =
-          IdentifierLoc::create(Actions.Context, StateLoc, StateInfo);
+      Hint.StateLoc = new (Actions.Context) IdentifierLoc(StateLoc, StateInfo);
 
       ConsumeToken(); // Consume the constant expression eof terminator.
     } else {
@@ -1546,7 +1552,7 @@ bool Parser::HandlePragmaLoopHint(LoopHint &Hint) {
           Arg2Error = true;
         } else
           Hint.StateLoc =
-              IdentifierLoc::create(Actions.Context, StateLoc, StateInfo);
+              new (Actions.Context) IdentifierLoc(StateLoc, StateInfo);
 
         PP.Lex(Tok); // Identifier
       }
@@ -1563,7 +1569,8 @@ bool Parser::HandlePragmaLoopHint(LoopHint &Hint) {
       ConsumeToken(); // Consume the constant expression eof terminator.
 
       if (Arg2Error || R.isInvalid() ||
-          Actions.CheckLoopHintExpr(R.get(), Toks[0].getLocation()))
+          Actions.CheckLoopHintExpr(R.get(), Toks[0].getLocation(),
+                                    /*AllowZero=*/false))
         return false;
 
       // Argument is a constant expression with an integer type.
@@ -1588,7 +1595,8 @@ bool Parser::HandlePragmaLoopHint(LoopHint &Hint) {
     ConsumeToken(); // Consume the constant expression eof terminator.
 
     if (R.isInvalid() ||
-        Actions.CheckLoopHintExpr(R.get(), Toks[0].getLocation()))
+        Actions.CheckLoopHintExpr(R.get(), Toks[0].getLocation(),
+                                  /*AllowZero=*/true))
       return false;
 
     // Argument is a constant expression with an integer type.
@@ -1916,7 +1924,8 @@ void Parser::HandlePragmaAttribute() {
     if (Tok.is(tok::code_completion)) {
       cutOffParsing();
       // FIXME: suppress completion of unsupported attributes?
-      Actions.CodeCompleteAttribute(AttributeCommonInfo::Syntax::AS_GNU);
+      Actions.CodeCompletion().CodeCompleteAttribute(
+          AttributeCommonInfo::Syntax::AS_GNU);
       return SkipToEnd();
     }
 
@@ -2115,6 +2124,7 @@ void PragmaGCCVisibilityHandler::HandlePragma(Preprocessor &PP,
 //   pack '(' [integer] ')'
 //   pack '(' 'show' ')'
 //   pack '(' ('push' | 'pop') [',' identifier] [, integer] ')'
+//   pack '(' 'packed' | 'full' | 'twobyte' | 'reset' ')' with -fzos-extensions
 void PragmaPackHandler::HandlePragma(Preprocessor &PP,
                                      PragmaIntroducer Introducer,
                                      Token &PackTok) {
@@ -2144,9 +2154,34 @@ void PragmaPackHandler::HandlePragma(Preprocessor &PP,
                  ? Sema::PSK_Push_Set
                  : Sema::PSK_Set;
   } else if (Tok.is(tok::identifier)) {
+    // Map pragma pack options to pack (integer).
+    auto MapPack = [&](const char *Literal) {
+      Action = Sema::PSK_Push_Set;
+      Alignment = Tok;
+      Alignment.setKind(tok::numeric_constant);
+      Alignment.setLiteralData(Literal);
+      Alignment.setLength(1);
+    };
+
     const IdentifierInfo *II = Tok.getIdentifierInfo();
     if (II->isStr("show")) {
       Action = Sema::PSK_Show;
+      PP.Lex(Tok);
+    } else if (II->isStr("packed") && PP.getLangOpts().ZOSExt) {
+      // #pragma pack(packed) is the same as #pragma pack(1)
+      MapPack("1");
+      PP.Lex(Tok);
+    } else if (II->isStr("full") && PP.getLangOpts().ZOSExt) {
+      // #pragma pack(full) is the same as #pragma pack(4)
+      MapPack("4");
+      PP.Lex(Tok);
+    } else if (II->isStr("twobyte") && PP.getLangOpts().ZOSExt) {
+      // #pragma pack(twobyte) is the same as #pragma pack(2)
+      MapPack("2");
+      PP.Lex(Tok);
+    } else if (II->isStr("reset") && PP.getLangOpts().ZOSExt) {
+      // #pragma pack(reset) is the same as #pragma pack(pop) on XL
+      Action = Sema::PSK_Pop;
       PP.Lex(Tok);
     } else {
       if (II->isStr("push")) {
@@ -2278,7 +2313,7 @@ void PragmaClangSectionHandler::HandlePragma(Preprocessor &PP,
                                              Token &FirstToken) {
 
   Token Tok;
-  auto SecKind = Sema::PragmaClangSectionKind::PCSK_Invalid;
+  auto SecKind = PragmaClangSectionKind::Invalid;
 
   PP.Lex(Tok); // eat 'section'
   while (Tok.isNot(tok::eod)) {
@@ -2289,15 +2324,15 @@ void PragmaClangSectionHandler::HandlePragma(Preprocessor &PP,
 
     const IdentifierInfo *SecType = Tok.getIdentifierInfo();
     if (SecType->isStr("bss"))
-      SecKind = Sema::PragmaClangSectionKind::PCSK_BSS;
+      SecKind = PragmaClangSectionKind::BSS;
     else if (SecType->isStr("data"))
-      SecKind = Sema::PragmaClangSectionKind::PCSK_Data;
+      SecKind = PragmaClangSectionKind::Data;
     else if (SecType->isStr("rodata"))
-      SecKind = Sema::PragmaClangSectionKind::PCSK_Rodata;
+      SecKind = PragmaClangSectionKind::Rodata;
     else if (SecType->isStr("relro"))
-      SecKind = Sema::PragmaClangSectionKind::PCSK_Relro;
+      SecKind = PragmaClangSectionKind::Relro;
     else if (SecType->isStr("text"))
-      SecKind = Sema::PragmaClangSectionKind::PCSK_Text;
+      SecKind = PragmaClangSectionKind::Text;
     else {
       PP.Diag(Tok.getLocation(), diag::err_pragma_expected_clang_section_name) << "clang section";
       return;
@@ -2306,7 +2341,8 @@ void PragmaClangSectionHandler::HandlePragma(Preprocessor &PP,
     SourceLocation PragmaLocation = Tok.getLocation();
     PP.Lex(Tok); // eat ['bss'|'data'|'rodata'|'text']
     if (Tok.isNot(tok::equal)) {
-      PP.Diag(Tok.getLocation(), diag::err_pragma_clang_section_expected_equal) << SecKind;
+      PP.Diag(Tok.getLocation(), diag::err_pragma_clang_section_expected_equal)
+          << SecKind;
       return;
     }
 
@@ -2314,11 +2350,11 @@ void PragmaClangSectionHandler::HandlePragma(Preprocessor &PP,
     if (!PP.LexStringLiteral(Tok, SecName, "pragma clang section", false))
       return;
 
-    Actions.ActOnPragmaClangSection(
-        PragmaLocation,
-        (SecName.size() ? Sema::PragmaClangSectionAction::PCSA_Set
-                        : Sema::PragmaClangSectionAction::PCSA_Clear),
-        SecKind, SecName);
+    Actions.ActOnPragmaClangSection(PragmaLocation,
+                                    (SecName.size()
+                                         ? PragmaClangSectionAction::Set
+                                         : PragmaClangSectionAction::Clear),
+                                    SecKind, SecName);
   }
 }
 
@@ -2357,20 +2393,20 @@ static void ParseAlignPragma(Preprocessor &PP, Token &FirstTok,
     return;
   }
 
-  Sema::PragmaOptionsAlignKind Kind = Sema::POAK_Natural;
+  PragmaOptionsAlignKind Kind = PragmaOptionsAlignKind::Natural;
   const IdentifierInfo *II = Tok.getIdentifierInfo();
   if (II->isStr("native"))
-    Kind = Sema::POAK_Native;
+    Kind = PragmaOptionsAlignKind::Native;
   else if (II->isStr("natural"))
-    Kind = Sema::POAK_Natural;
+    Kind = PragmaOptionsAlignKind::Natural;
   else if (II->isStr("packed"))
-    Kind = Sema::POAK_Packed;
+    Kind = PragmaOptionsAlignKind::Packed;
   else if (II->isStr("power"))
-    Kind = Sema::POAK_Power;
+    Kind = PragmaOptionsAlignKind::Power;
   else if (II->isStr("mac68k"))
-    Kind = Sema::POAK_Mac68k;
+    Kind = PragmaOptionsAlignKind::Mac68k;
   else if (II->isStr("reset"))
-    Kind = Sema::POAK_Reset;
+    Kind = PragmaOptionsAlignKind::Reset;
   else {
     PP.Diag(Tok.getLocation(), diag::warn_pragma_align_invalid_option)
       << IsOptions;
@@ -3419,7 +3455,6 @@ void PragmaSTDC_FENV_ROUNDHandler::HandlePragma(Preprocessor &PP,
                                                 PragmaIntroducer Introducer,
                                                 Token &Tok) {
   Token PragmaName = Tok;
-  SmallVector<Token, 1> TokenList;
   if (!PP.getTargetInfo().hasStrictFP() && !PP.getLangOpts().ExpStrictFP) {
     PP.Diag(Tok.getLocation(), diag::warn_pragma_fp_ignored)
         << PragmaName.getIdentifierInfo()->getName();
@@ -3895,8 +3930,8 @@ void PragmaForceCUDAHostDeviceHandler::HandlePragma(
   }
 
   if (Info->isStr("begin"))
-    Actions.PushForceCUDAHostDevice();
-  else if (!Actions.PopForceCUDAHostDevice())
+    Actions.CUDA().PushForceHostDevice();
+  else if (!Actions.CUDA().PopForceHostDevice())
     PP.Diag(FirstTok.getLocation(),
             diag::err_pragma_cannot_end_force_cuda_host_device);
 
@@ -4144,7 +4179,7 @@ void PragmaRISCVHandler::HandlePragma(Preprocessor &PP,
   }
 
   if (II->isStr("vector"))
-    Actions.DeclareRISCVVBuiltins = true;
+    Actions.RISCV().DeclareRVVBuiltins = true;
   else if (II->isStr("sifive_vector"))
-    Actions.DeclareRISCVSiFiveVectorBuiltins = true;
+    Actions.RISCV().DeclareSiFiveVectorBuiltins = true;
 }
